@@ -6,6 +6,7 @@
 #include <windows.h>
 #include <intrin.h>
 
+#include <random>
 #include <cstdint>
 #include <cstdlib>
 #include <cstring>
@@ -92,6 +93,30 @@ struct Vec4
             -xyzw[0], -xyzw[1], -xyzw[2], -xyzw[3],
         };
 	}
+
+    inline Vec4& operator-=(Vec4 other)
+    {
+        m128 = _mm_sub_ps(m128, other.m128);
+        return *this;
+    }
+
+    inline Vec4& operator+=(Vec4 other)
+    {
+        m128 = _mm_add_ps(m128, other.m128);
+        return *this;
+    }
+
+    inline Vec4& operator*=(float s)
+    {
+        m128 = _mm_mul_ps(m128, _mm_set1_ps(s));
+        return *this;
+    }
+
+    inline Vec4& operator/=(float s)
+    {
+        m128 = _mm_div_ps(m128, _mm_set1_ps(s));
+        return *this;
+    }
 };
 
 inline float Dot(Vec4 a, Vec4 b)
@@ -147,11 +172,12 @@ inline Vec4 Normalize(Vec4 vec)
 namespace collision
 {
 inline bool RaySphereIntersection(
-	math::Vec4 raySphere, float sphereRadius, math::Vec4 rayDirection
+	math::Vec4 sphereCenter, float sphereRadius, math::Vec4 rayDirection, math::Vec4 rayOrigin
 )
 {
-	float const tCenter = Dot(raySphere, rayDirection);
-	float const distanceSquare = Dot(raySphere, raySphere) - tCenter * tCenter;
+    sphereCenter -= rayOrigin;
+	float const tCenter = Dot(sphereCenter, rayDirection);
+	float const distanceSquare = Dot(sphereCenter, sphereCenter) - tCenter * tCenter;
 
 	return (tCenter > 0) && (sphereRadius * sphereRadius - distanceSquare > 0);
 }
@@ -202,6 +228,7 @@ inline math::Vec4 CalculateRayPlaneContactPoint(
 }
 } // namespace collision 
 
+uint32_t constexpr samples = 4;
 uint32_t constexpr width  = 1080;
 uint32_t constexpr heigth = 1080;
 float constexpr ratio = static_cast<float>(width) / heigth;
@@ -217,7 +244,8 @@ float constexpr farPlane  = 100;
 math::Vec4 constexpr lightPos = { 5, 10, 1 };
 math::Vec4 constexpr planeNormal = { 0, 1, 0 };
 math::Vec4 constexpr planePoint = { 0, -0.5, 0 };
-math::Vec4 constexpr planeColor = { 246,219,219 };
+math::Vec4 constexpr planeColor = { 246, 219, 219 };
+math::Vec4 constexpr initColor = { 137, 207, 240 };
 
 math::Vec4 constexpr colors[9] = {
 	{10,  255, 110}, {110, 10, 255}, {255, 100, 230}, 
@@ -236,91 +264,134 @@ float constexpr radius[9] = {
 };
 uint32_t constexpr sphereNumber = 9;
 
+float GenerateUniformRealDist()
+{
+    static std::random_device rd;
+    static std::mt19937 gen(rd()); 
+    static std::uniform_real_distribution<float> dis(0.f, 1.0f);
+
+    return dis(gen);
+}
+
+namespace
+{
+template < typename uint8_t D >
+math::Vec4 GenerateUnitVectorValue()
+{
+    auto vec = GenerateUnitVectorValue<D - 1>();
+    vec.xyzw[D] = GenerateUniformRealDist();
+    return vec;
+}
+
+template <>
+math::Vec4 GenerateUnitVectorValue<0>()
+{
+    return { GenerateUniformRealDist(), 0, 0, 0 };
+}
+} // namespace ::
+
+template < typename uint8_t D = 3 >
+math::Vec4 GenerateUnitVector()
+{
+    return math::Normalize(::GenerateUnitVectorValue<D - 1>());
+}
+
 void InitImage()
 {
 	for (uint32_t i = 0; i < size; i += stride)
 	{
-		data[i + 0] = static_cast<uint8_t>(137 * (float(size - i) / size));
-		data[i + 1] = static_cast<uint8_t>(207 * (float(size - i) / size));
-		data[i + 2] = static_cast<uint8_t>(240 * (float(size - i) / size));
+		data[i + 0] = static_cast<uint8_t>(initColor.xyzw[0] * (float(size - i) / size));
+		data[i + 1] = static_cast<uint8_t>(initColor.xyzw[1] * (float(size - i) / size));
+		data[i + 2] = static_cast<uint8_t>(initColor.xyzw[2] * (float(size - i) / size));
 	}
+}
+
+inline void WritePixel(uint32_t index, math::Vec4 color)
+{
+    data[index + 0] = static_cast<uint8_t>(std::round(color.xyzw[0]));
+    data[index + 1] = static_cast<uint8_t>(std::round(color.xyzw[1]));
+    data[index + 2] = static_cast<uint8_t>(std::round(color.xyzw[2]));
+}
+
+inline uint8_t FindClosestIntersectionSphere(math::Vec4 primeRayDirection, math::Vec4 primeRayOrigin)
+{
+    uint8_t minIndex = sphereNumber;
+    float minDistanceSq = FLT_MAX;
+
+    for (uint8_t index = 0; index < sphereNumber; ++index)
+    {
+        if (collision::RaySphereIntersection(sphere[index], radius[index], primeRayDirection, primeRayOrigin))
+        {
+            math::Vec4 const intersectionPoint = collision::CalculateRaySphereContactPoint(
+                sphere[index], radius[index], primeRayOrigin, primeRayDirection
+            );
+            float const distanceSq = math::LengthSquared(primeRayOrigin - intersectionPoint);
+            minIndex = minDistanceSq > distanceSq ? index : minIndex;
+            minDistanceSq = minDistanceSq > distanceSq ? distanceSq : minDistanceSq;
+        }
+    }
+
+    return minIndex;
+}
+
+inline math::Vec4 SampleColor(math::Vec4 direction, math::Vec4 origin, math::Vec4 sampleColor, uint32_t bounces)
+{  
+    uint8_t const sphereIndex = FindClosestIntersectionSphere(direction, origin);
+
+    if (sphereIndex < sphereNumber)
+    {
+        math::Vec4 const shadowRayOrigin = collision::CalculateRaySphereContactPoint(sphere[sphereIndex], radius[sphereIndex], origin, direction);
+        math::Vec4 const shadowRayDirection = math::Normalize(lightPos - shadowRayOrigin);
+        math::Vec4 const uint = GenerateUnitVector();
+
+        uint8_t const shadowSphereIndex = FindClosestIntersectionSphere(shadowRayDirection, shadowRayOrigin);
+        if (shadowSphereIndex < sphereNumber)
+        {
+            sampleColor = colors[sphereIndex] * 0.01f;
+        }
+        else
+        {
+            math::Vec4 const sphereContactNormal = collision::CalculateRaySphereContactNormal(shadowRayOrigin, sphere[sphereIndex]);
+            float const light = ::Clamp(math::Dot(sphereContactNormal, shadowRayDirection));
+            sampleColor = colors[sphereIndex] * light;
+        }
+    }
+    else if (collision::RayPlaneIntersection(planeNormal, planePoint, origin, direction))
+    {
+        math::Vec4 const shadowRayOrigin = collision::CalculateRayPlaneContactPoint(planeNormal, planePoint, origin, direction);
+        math::Vec4 const shadowRayDirection = Normalize(lightPos - shadowRayOrigin);
+
+        uint8_t const shadowSphereIndex = FindClosestIntersectionSphere(shadowRayDirection, shadowRayOrigin);
+        float const light = shadowSphereIndex < sphereNumber ? 0.1f : ::Clamp(Dot(planeNormal, shadowRayDirection));
+        sampleColor = planeColor * light;
+    }
+
+    return sampleColor;
 }
 
 void RenderImage()
 {
-	math::Vec4 const primeRayOrigin = { 0, 1, 0 };
+	math::Vec4 const primeRayOrigin{ 0, 1, 0, 0 };
 
 	for (uint32_t y = 0; y < heigth; ++y)
 	{
 		for (uint32_t x = 0; x < width; ++x)
 		{
-			float const u = static_cast<float>(y) / width;
-			float const v = static_cast<float>(x) / heigth;
-			math::Vec4 const primeRayDirection = math::Normalize({ -1.f + 2.f * v, -1.f + 2.f * u, 1.f } );
+            uint32_t const index = size - ((width - x) * stride + y * width * stride);
+            math::Vec4 pixelColor{ 0, 0, 0, 0 };
 
-			bool isEmpty = true;
-			for (uint8_t i = 0; i < sphereNumber; ++i)
-			{
-				if (isEmpty = collision::RaySphereIntersection(sphere[i] - primeRayOrigin, radius[i], primeRayDirection))
-				{
-					math::Vec4 const shadowRayOrigin = collision::CalculateRaySphereContactPoint(
-						sphere[i], radius[i], primeRayOrigin, primeRayDirection);
-					math::Vec4 const shadowRayDirection = math::Normalize(lightPos - shadowRayOrigin);
+            for (uint8_t s = 0; s < samples; ++s)
+            {
+                math::Vec4 sampleColor{ (float)data[index + 0], (float)data[index + 1], (float)data[index + 2] };
+			    float const u = static_cast<float>(y + GenerateUniformRealDist()) / width;
+			    float const v = static_cast<float>(x + GenerateUniformRealDist()) / heigth;
+			    math::Vec4 const primeRayDirection = math::Normalize({ -1.f + 2.f * v, -1.f + 2.f * u, 1.f } );
 
-					bool isInShadow = false;
-					for (uint8_t j = 0; j < sphereNumber; ++j)
-					{
-						isInShadow = (i != j) && collision::RaySphereIntersection(
-							sphere[j] - shadowRayOrigin, radius[j], shadowRayDirection);
-						if (isInShadow)
-							break;
-					}
+                pixelColor += SampleColor(primeRayDirection, primeRayOrigin, sampleColor, 10);
+            }
 
-					uint32_t const index = size - ((width - x) * stride + y * width * stride);
-					if (!isInShadow)
-					{
-						math::Vec4 const sphereContactNormal 
-							= collision::CalculateRaySphereContactNormal(shadowRayOrigin, sphere[i]);
-
-						float const light = ::Clamp(math::Dot(sphereContactNormal, shadowRayDirection));
-						data[index + 0] = static_cast<uint8_t>(colors[i].xyzw[0] * light);
-						data[index + 1] = static_cast<uint8_t>(colors[i].xyzw[1] * light);
-						data[index + 2] = static_cast<uint8_t>(colors[i].xyzw[2] * light);
-					}
-					else
-					{
-						data[index + 0] = static_cast<uint8_t>(colors[i].xyzw[0] * 0.01f);
-						data[index + 1] = static_cast<uint8_t>(colors[i].xyzw[1] * 0.01f);
-						data[index + 2] = static_cast<uint8_t>(colors[i].xyzw[2] * 0.01f);
-					}
-
-					break;
-				}
-			}
-
-			if (!isEmpty)
-			{
-				if (collision::RayPlaneIntersection(planeNormal, planePoint, primeRayOrigin, primeRayDirection))
-				{
-					math::Vec4 const shadowRayOrigin = collision::CalculateRayPlaneContactPoint(
-						planeNormal, planePoint, primeRayOrigin, primeRayDirection);
-					math::Vec4 const shadowRayDirection = Normalize(lightPos - shadowRayOrigin);
-
-					bool isInShadow = false;
-					for (uint8_t i = 0; i < sphereNumber; ++i)
-					{
-						isInShadow = collision::RaySphereIntersection(sphere[i] - shadowRayOrigin, radius[i], shadowRayDirection);
-						if (isInShadow)
-							break;
-					}
-
-					float const light = isInShadow ? 0.1f : ::Clamp(Dot(planeNormal, shadowRayDirection));
-					uint32_t const index = size - ((width - x) * stride + y * width * stride);
-					data[index + 0] = static_cast<uint8_t>(planeColor.xyzw[0] * light);
-					data[index + 1] = static_cast<uint8_t>(planeColor.xyzw[1] * light);
-					data[index + 2] = static_cast<uint8_t>(planeColor.xyzw[2] * light);
-				}
-			}
+            pixelColor *= (1.f / static_cast<float>(samples));
+            WritePixel(index, pixelColor);
 		}
 	}
 }
