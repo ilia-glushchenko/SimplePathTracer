@@ -11,6 +11,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <limits>
+#include <string>
 
 namespace 
 {
@@ -172,14 +173,14 @@ inline Vec4 Normalize(Vec4 vec)
 namespace collision
 {
 inline bool RaySphereIntersection(
-	math::Vec4 sphereCenter, float sphereRadius, math::Vec4 rayDirection, math::Vec4 rayOrigin
+	math::Vec4 sphereCenter, float sphereRadius, math::Vec4 rayDirection, math::Vec4 rayOrigin, float threshold = 1e-3f
 )
 {
     sphereCenter -= rayOrigin;
 	float const tCenter = Dot(sphereCenter, rayDirection);
 	float const distanceSquare = Dot(sphereCenter, sphereCenter) - tCenter * tCenter;
 
-	return (tCenter > 0) && (sphereRadius * sphereRadius - distanceSquare > 0);
+	return (tCenter > threshold) && (sphereRadius * sphereRadius - distanceSquare > threshold);
 }
 
 inline float CalculateRaySphereIntersectionFactors(
@@ -228,7 +229,8 @@ inline math::Vec4 CalculateRayPlaneContactPoint(
 }
 } // namespace collision 
 
-uint32_t constexpr samples = 4;
+uint32_t constexpr bounces = 10;
+uint32_t constexpr samples = 12;
 uint32_t constexpr width  = 1080;
 uint32_t constexpr heigth = 1080;
 float constexpr ratio = static_cast<float>(width) / heigth;
@@ -236,39 +238,54 @@ uint8_t  constexpr stride = 3;
 uint32_t constexpr size = width * heigth * stride;
 uint8_t* const data = (uint8_t*)std::malloc(sizeof(uint8_t) * size);
 
-math::Vec4 constexpr eyePos = { 0, 0, 0 };
+math::Vec4 constexpr eyePos = { 0, 1, 0 };
 math::Vec4 constexpr eyeDir = { 0, 0, 1 };
 math::Vec4 constexpr upDir  = { 0, 1, 0 };
 float constexpr nearPlane = 1;
 float constexpr farPlane  = 100;
-math::Vec4 constexpr lightPos = { 5, 10, 1 };
+math::Vec4 constexpr lightPos = { 5, -10, 1 };
 math::Vec4 constexpr planeNormal = { 0, 1, 0 };
 math::Vec4 constexpr planePoint = { 0, -0.5, 0 };
 math::Vec4 constexpr planeColor = { 246, 219, 219 };
 math::Vec4 constexpr initColor = { 137, 207, 240 };
 
-math::Vec4 constexpr colors[9] = {
-	{10,  255, 110}, {110, 10, 255}, {255, 100, 230}, 
+enum class Material : uint8_t
+{
+    DIFFUSE = 0,
+    REFLECTIVE = 1,
+};
+
+math::Vec4 constexpr colors[10] = {
+    { 30, 144, 255 },
+    {10,  255, 110}, {110, 10, 255}, {255, 100, 230}, 
 	{200, 255, 110}, {210, 10, 255}, {255, 100, 150},
 	{50,  255, 200}, {10, 210, 255}, {255, 100, 220},
 };
-math::Vec4 constexpr sphere[9] = {
-	{-1, 0, 3}, {0, 0, 3}, {1, 0, 3}, 
+math::Vec4 constexpr sphere[10] = {
+    {0, -1000.5f, 0},
+    { 0, 0, 3}, {-1, 0, 3}, {1, 0, 3},
 	{-1, 1, 3}, {0, 1, 3}, {1, 1, 3}, 
 	{-1, 2, 3}, {0, 2, 3}, {1, 2, 3}, 
 };
-float constexpr radius[9] = {
-	0.5f, 0.5f, 0.5f, 
+float constexpr radius[10] = {
+    1000.f,
+    0.5f, 0.5f, 0.5f,
 	0.5f, 0.5f, 0.5f,
 	0.5f, 0.5f, 0.5f,
 };
-uint32_t constexpr sphereNumber = 9;
+Material constexpr materials[10] = {
+    Material::DIFFUSE, 
+    Material::REFLECTIVE, Material::DIFFUSE, Material::DIFFUSE,
+    Material::DIFFUSE, Material::DIFFUSE, Material::DIFFUSE,
+    Material::DIFFUSE, Material::DIFFUSE, Material::DIFFUSE,
+};
+uint32_t constexpr sphereNumber = 10;
 
-float GenerateUniformRealDist()
+inline float GenerateUniformRealDist(float min = -1.f, float max = 1.f)
 {
-    static std::random_device rd;
-    static std::mt19937 gen(rd()); 
-    static std::uniform_real_distribution<float> dis(0.f, 1.0f);
+    static thread_local std::random_device rd;
+    static thread_local std::mt19937_64 gen(rd());
+    std::uniform_real_distribution<float> dis(min, max);
 
     return dis(gen);
 }
@@ -276,7 +293,7 @@ float GenerateUniformRealDist()
 namespace
 {
 template < typename uint8_t D >
-math::Vec4 GenerateUnitVectorValue()
+__forceinline math::Vec4 GenerateUnitVectorValue()
 {
     auto vec = GenerateUnitVectorValue<D - 1>();
     vec.xyzw[D] = GenerateUniformRealDist();
@@ -284,16 +301,29 @@ math::Vec4 GenerateUnitVectorValue()
 }
 
 template <>
-math::Vec4 GenerateUnitVectorValue<0>()
+__forceinline math::Vec4 GenerateUnitVectorValue<0>()
 {
     return { GenerateUniformRealDist(), 0, 0, 0 };
 }
 } // namespace ::
 
 template < typename uint8_t D = 3 >
-math::Vec4 GenerateUnitVector()
+__forceinline math::Vec4 GenerateUnitVector()
 {
     return math::Normalize(::GenerateUnitVectorValue<D - 1>());
+}
+
+__forceinline math::Vec4 GenerateInsideSphereVector(float radius = 0.5f)
+{
+    math::Vec4 result;
+    
+    do {
+        result = { GenerateUniformRealDist(-radius, radius), 
+            GenerateUniformRealDist(-radius, radius), 
+            GenerateUniformRealDist(-radius, radius) };
+    } while (math::Length(result) < radius);
+
+    return result;
 }
 
 void InitImage()
@@ -308,9 +338,9 @@ void InitImage()
 
 inline void WritePixel(uint32_t index, math::Vec4 color)
 {
-    data[index + 0] = static_cast<uint8_t>(std::round(color.xyzw[0]));
-    data[index + 1] = static_cast<uint8_t>(std::round(color.xyzw[1]));
-    data[index + 2] = static_cast<uint8_t>(std::round(color.xyzw[2]));
+    data[index + 0] = static_cast<uint8_t>(std::round(std::sqrt(color.xyzw[0] / 255.f) * 255.f));
+    data[index + 1] = static_cast<uint8_t>(std::round(std::sqrt(color.xyzw[1] / 255.f) * 255.f));
+    data[index + 2] = static_cast<uint8_t>(std::round(std::sqrt(color.xyzw[2] / 255.f) * 255.f));
 }
 
 inline uint8_t FindClosestIntersectionSphere(math::Vec4 primeRayDirection, math::Vec4 primeRayOrigin)
@@ -334,36 +364,49 @@ inline uint8_t FindClosestIntersectionSphere(math::Vec4 primeRayDirection, math:
     return minIndex;
 }
 
-inline math::Vec4 SampleColor(math::Vec4 direction, math::Vec4 origin, math::Vec4 sampleColor, uint32_t bounces)
-{  
-    uint8_t const sphereIndex = FindClosestIntersectionSphere(direction, origin);
+template < typename Material M >
+inline math::Vec4 SampleColor(math::Vec4 direction, math::Vec4 origin, math::Vec4 sampleColor, uint32_t bounceCount);
 
+template <>
+inline math::Vec4 SampleColor<Material::DIFFUSE>(math::Vec4 direction, math::Vec4 origin, math::Vec4 sampleColor, uint32_t bounceCount)
+{  
+    uint8_t sphereIndex = FindClosestIntersectionSphere(direction, origin);
     if (sphereIndex < sphereNumber)
     {
-        math::Vec4 const shadowRayOrigin = collision::CalculateRaySphereContactPoint(sphere[sphereIndex], radius[sphereIndex], origin, direction);
-        math::Vec4 const shadowRayDirection = math::Normalize(lightPos - shadowRayOrigin);
-        math::Vec4 const uint = GenerateUnitVector();
+        sampleColor = colors[sphereIndex] * 0.5f;
+        origin = collision::CalculateRaySphereContactPoint(sphere[sphereIndex], radius[sphereIndex], origin, direction);
+        direction = math::Normalize(collision::CalculateRaySphereContactNormal(origin, sphere[sphereIndex]) + GenerateInsideSphereVector());
+        sphereIndex = FindClosestIntersectionSphere(direction, origin);
 
-        uint8_t const shadowSphereIndex = FindClosestIntersectionSphere(shadowRayDirection, shadowRayOrigin);
-        if (shadowSphereIndex < sphereNumber)
-        {
-            sampleColor = colors[sphereIndex] * 0.01f;
-        }
-        else
-        {
-            math::Vec4 const sphereContactNormal = collision::CalculateRaySphereContactNormal(shadowRayOrigin, sphere[sphereIndex]);
-            float const light = ::Clamp(math::Dot(sphereContactNormal, shadowRayDirection));
-            sampleColor = colors[sphereIndex] * light;
+        while (--bounceCount && sphereIndex < sphereNumber) {
+            sampleColor = sampleColor * 0.5f;
+            origin = collision::CalculateRaySphereContactPoint(sphere[sphereIndex], radius[sphereIndex], origin, direction);
+            direction = math::Normalize(origin + collision::CalculateRaySphereContactNormal(origin, sphere[sphereIndex]) + GenerateInsideSphereVector());
+            sphereIndex = FindClosestIntersectionSphere(direction, origin);
         }
     }
-    else if (collision::RayPlaneIntersection(planeNormal, planePoint, origin, direction))
+    else
     {
-        math::Vec4 const shadowRayOrigin = collision::CalculateRayPlaneContactPoint(planeNormal, planePoint, origin, direction);
-        math::Vec4 const shadowRayDirection = Normalize(lightPos - shadowRayOrigin);
+        sampleColor = initColor * (direction.xyzw[1] + 1.f) * 0.5f;
+    }
 
-        uint8_t const shadowSphereIndex = FindClosestIntersectionSphere(shadowRayDirection, shadowRayOrigin);
-        float const light = shadowSphereIndex < sphereNumber ? 0.1f : ::Clamp(Dot(planeNormal, shadowRayDirection));
-        sampleColor = planeColor * light;
+    return sampleColor;
+}
+
+template <>
+inline math::Vec4 SampleColor<Material::REFLECTIVE>(math::Vec4 direction, math::Vec4 origin, math::Vec4 sampleColor, uint32_t bounceCount)
+{
+    uint8_t sphereIndex = FindClosestIntersectionSphere(direction, origin);
+    if (sphereIndex < sphereNumber)
+    {
+        origin = collision::CalculateRaySphereContactPoint(sphere[sphereIndex], radius[sphereIndex], origin, direction);
+        math::Vec4 normal = collision::CalculateRaySphereContactNormal(origin, sphere[sphereIndex]);
+        direction = math::Normalize(direction - normal * math::Dot(direction, normal) * 2.f);// +GenerateInsideSphereVector(0.3f));
+
+        sampleColor = SampleColor<Material::DIFFUSE>(direction, origin, { 255.f, 255.f, 255.f, 0.f }, 10);
+        sampleColor.xyzw[0] *= 0.8f;
+        sampleColor.xyzw[1] *= 0.8f;
+        sampleColor.xyzw[2] *= 0.7f;
     }
 
     return sampleColor;
@@ -371,7 +414,7 @@ inline math::Vec4 SampleColor(math::Vec4 direction, math::Vec4 origin, math::Vec
 
 void RenderImage()
 {
-	math::Vec4 const primeRayOrigin{ 0, 1, 0, 0 };
+	math::Vec4 const primeRayOrigin{ eyePos };
 
 	for (uint32_t y = 0; y < heigth; ++y)
 	{
@@ -387,7 +430,23 @@ void RenderImage()
 			    float const v = static_cast<float>(x + GenerateUniformRealDist()) / heigth;
 			    math::Vec4 const primeRayDirection = math::Normalize({ -1.f + 2.f * v, -1.f + 2.f * u, 1.f } );
 
-                pixelColor += SampleColor(primeRayDirection, primeRayOrigin, sampleColor, 10);
+                uint8_t sphereIndex = FindClosestIntersectionSphere(primeRayDirection, primeRayOrigin);
+                if (sphereIndex < sphereNumber)
+                {
+                    switch (sphereIndex)
+                    {                            
+                        case 1:
+                            pixelColor += SampleColor<Material::REFLECTIVE>(primeRayDirection, primeRayOrigin, sampleColor, bounces);
+                            break;
+                        default:
+                            pixelColor += SampleColor<Material::DIFFUSE>(primeRayDirection, primeRayOrigin, sampleColor, bounces);
+                            break;
+                    }
+                }
+                else
+                {
+                    pixelColor += SampleColor<Material::DIFFUSE>(primeRayDirection, primeRayOrigin, sampleColor, bounces);
+                }
             }
 
             pixelColor *= (1.f / static_cast<float>(samples));
@@ -398,7 +457,7 @@ void RenderImage()
 
 void SaveImage()
 {
-	stbi_write_bmp("output.bmp", width, heigth, stride, data);
+    stbi_write_bmp((std::string("output") + std::to_string(samples) + "s" + std::to_string(bounces) + "b" + ".bmp").c_str(), width, heigth, stride, data);
 }
 
 int main()
