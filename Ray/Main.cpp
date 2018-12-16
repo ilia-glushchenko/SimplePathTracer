@@ -6,6 +6,7 @@
 #include <windows.h>
 #include <intrin.h>
 
+#include <thread>
 #include <random>
 #include <cstdint>
 #include <cstdlib>
@@ -229,10 +230,10 @@ inline math::Vec4 CalculateRayPlaneContactPoint(
 }
 } // namespace collision 
 
-uint32_t constexpr bounces = 10;
-uint32_t constexpr samples = 12;
-uint32_t constexpr width  = 1080;
-uint32_t constexpr heigth = 1080;
+uint32_t constexpr bounces = 64;
+uint32_t constexpr samples = 128;
+uint32_t constexpr width  = 1440;
+uint32_t constexpr heigth = 1440;
 float constexpr ratio = static_cast<float>(width) / heigth;
 uint8_t  constexpr stride = 3;
 uint32_t constexpr size = width * heigth * stride;
@@ -401,7 +402,7 @@ inline math::Vec4 SampleColor<Material::REFLECTIVE>(math::Vec4 direction, math::
     {
         origin = collision::CalculateRaySphereContactPoint(sphere[sphereIndex], radius[sphereIndex], origin, direction);
         math::Vec4 normal = collision::CalculateRaySphereContactNormal(origin, sphere[sphereIndex]);
-        direction = math::Normalize(direction - normal * math::Dot(direction, normal) * 2.f);// +GenerateInsideSphereVector(0.3f));
+        direction = math::Normalize(direction - normal * math::Dot(direction, normal) * 2.f);// +GenerateInsideSphereVector() * 0.3f;
 
         sampleColor = SampleColor<Material::DIFFUSE>(direction, origin, { 255.f, 255.f, 255.f, 0.f }, 10);
         sampleColor.xyzw[0] *= 0.8f;
@@ -412,18 +413,18 @@ inline math::Vec4 SampleColor<Material::REFLECTIVE>(math::Vec4 direction, math::
     return sampleColor;
 }
 
-void RenderImage()
+void Render(uint32_t yBegin, uint32_t yEnd, uint32_t xBegin, uint32_t xEnd)
 {
 	math::Vec4 const primeRayOrigin{ eyePos };
 
-	for (uint32_t y = 0; y < heigth; ++y)
+	for (uint32_t y = yBegin; y < yEnd; ++y)
 	{
-		for (uint32_t x = 0; x < width; ++x)
+		for (uint32_t x = xBegin; x < xEnd; ++x)
 		{
             uint32_t const index = size - ((width - x) * stride + y * width * stride);
             math::Vec4 pixelColor{ 0, 0, 0, 0 };
 
-            for (uint8_t s = 0; s < samples; ++s)
+            for (uint32_t s = 0; s < samples; ++s)
             {
                 math::Vec4 sampleColor{ (float)data[index + 0], (float)data[index + 1], (float)data[index + 2] };
 			    float const u = static_cast<float>(y + GenerateUniformRealDist()) / width;
@@ -460,8 +461,36 @@ void SaveImage()
     stbi_write_bmp((std::string("output") + std::to_string(samples) + "s" + std::to_string(bounces) + "b" + ".bmp").c_str(), width, heigth, stride, data);
 }
 
+void RenderImage()
+{
+    uint32_t const hardwearThreads = std::thread::hardware_concurrency();
+    uint32_t const threadCount = hardwearThreads % 2 != 0 ? hardwearThreads + 1 : hardwearThreads;
+    uint32_t const segmentWidth = width / threadCount;
+    uint32_t const segmentHeigth = heigth / threadCount;
+    std::vector<std::thread> threads(threadCount);
+
+    for (uint32_t j = 0; j < threadCount; ++j)
+    {
+        for (uint32_t i = 0; i < threadCount; ++i)
+        {
+            uint32_t yBegin = segmentHeigth * j;
+            uint32_t yEnd = yBegin + segmentHeigth > heigth ? heigth : yBegin + segmentHeigth;
+            uint32_t xBegin = segmentWidth * i;
+            uint32_t xEnd = xBegin + segmentWidth > width ? width : xBegin + segmentWidth;
+            threads[i] = std::thread(Render, yBegin, yEnd, xBegin, xEnd);
+        }
+        for (auto& thread : threads) 
+            if (thread.joinable()) 
+                thread.join();
+        SaveImage();
+    }
+}
+
 int main()
 {
+    static_assert(width % 2 == 0);
+    static_assert(heigth % 2 == 0);
+
 	InitImage();
 	RenderImage();
 	SaveImage();
