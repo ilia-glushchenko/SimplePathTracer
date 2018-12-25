@@ -3,9 +3,11 @@
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb/stb_image.h"
 
+#define NOMINMAX
 #include <windows.h>
 #include <intrin.h>
 
+#include <algorithm>
 #include <thread>
 #include <random>
 #include <cstdint>
@@ -172,8 +174,8 @@ namespace
 {
 inline float GenerateUniformRealDist(float min = -1.f, float max = 1.f)
 {
-    static thread_local std::random_device rd;
-    static thread_local std::mt19937_64 gen(rd());
+    std::random_device rd;
+    std::mt19937_64 gen(rd());
     std::uniform_real_distribution<float> dis(min, max);
 
     return dis(gen);
@@ -181,8 +183,8 @@ inline float GenerateUniformRealDist(float min = -1.f, float max = 1.f)
 
 inline float GenerateNormalRealDist(float min = -1.f, float max = 1.f)
 {
-    static thread_local std::random_device rd;
-    static thread_local std::mt19937_64 gen(rd());
+    std::random_device rd;
+    std::mt19937_64 gen(rd());
     std::normal_distribution<float> dis(min, max);
 
     return dis(gen);
@@ -327,7 +329,7 @@ inline math::Vec4 CalculateRayPlaneContactPoint(
 } // namespace collision 
 
 uint32_t constexpr bounces = 10;
-uint32_t constexpr samples = 100;
+uint32_t constexpr samples = 1000;
 uint32_t constexpr width  = 1440;
 uint32_t constexpr heigth = 1440;
 float constexpr ratio = static_cast<float>(width) / heigth;
@@ -335,11 +337,9 @@ uint8_t  constexpr stride = 3;
 uint32_t constexpr size = width * heigth * stride;
 uint8_t* const data = (uint8_t*)std::malloc(sizeof(uint8_t) * size);
 
-math::Vec4 constexpr eyePos = { 0, 0, -3 };
-math::Vec4 constexpr eyeDir = { 0, 0, 1 };
+math::Vec4 constexpr lookAt = { 0, 0, 0 };
+math::Vec4 constexpr eyePos = { 0, 3, -5 };
 math::Vec4 constexpr upDir  = { 0, 1, 0 };
-float constexpr nearPlane = 1;
-float constexpr farPlane  = 100;
 math::Vec4 constexpr lightPos = { 5, -10, 1 };
 math::Vec4 constexpr planeNormal = { 0, 1, 0 };
 math::Vec4 constexpr planePoint = { 0, -0.5, 0 };
@@ -349,40 +349,72 @@ math::Vec4 constexpr initColor = { 137, 207, 240 };
 enum class Material : uint8_t
 {
     SKYBOX,
-    DIFFUSE,
     REFLECTIVE,
     REFRACTIVE,
+    DIFFUSE,
 };
 
-math::Vec4 constexpr colors[10] = {
-    { 30, 144, 255},
-    { 10, 255, 110}, {110,  10, 255}, {255, 100, 230}, 
-	{200, 255, 110}, {210,  10, 255}, {255, 100, 150},
-	{ 50, 255, 200}, { 10, 210, 255}, {255, 100, 220},
-};
+std::vector<math::Vec4> g_colors;
+std::vector<math::Vec4> g_spheres;
+std::vector<float> g_radii;
+std::vector<Material> g_materials;
+uint32_t g_sphereNumber = 10;
 
-math::Vec4 constexpr sphere[10] = {
-    {0, -1000.5f, 0},
-    {0, 0, 0}, {0, 0, 3}, {1, 0, 0},
-	{-1, 1, 0}, {0, 1, 0}, {1, 1, 0}, 
-	{-1, 2, 0}, {0, 2, 0}, {1, 2, 0}, 
-};
+void GenerateSpheres()
+{
+    g_colors = { { 30, 144, 255 } };
+    g_spheres = { {0, -1000, 0} };
+    g_radii = { 1000.f };
+    g_materials = { Material::DIFFUSE };
 
-float constexpr radius[10] = {
-    1000.f,
-    0.5f, 0.5f, 0.5f,
-	0.5f, 0.5f, 0.5f,
-	0.5f, 0.5f, 0.5f,
-};
+    float const minSphereDistance = 0.1f;
+    float const minR = 0.3f;
+    float const maxR = 0.5f;
 
-Material constexpr materials[10] = {
-    Material::DIFFUSE, 
-    Material::REFRACTIVE, Material::DIFFUSE, Material::REFLECTIVE,
-    Material::DIFFUSE, Material::REFLECTIVE, Material::DIFFUSE,
-    Material::DIFFUSE, Material::DIFFUSE, Material::DIFFUSE,
-};
+    for (float z = -3; z < 20; z += 1.25f)
+    {
+        for (float x = -5; x < 6; x += 1.25f)
+        {
+            if (::GenerateUniformRealDist(0, 1.f) > 0.1f)
+            {
+                g_radii.push_back(::GenerateUniformRealDist(minR, maxR));
+                g_spheres.push_back({ x + ::GenerateUniformRealDist(0, minR), g_radii.back(), z + ::GenerateUniformRealDist(0, minR) });
+                g_colors.push_back({ ::GenerateUniformRealDist(0, 255), ::GenerateUniformRealDist(0, 255), ::GenerateUniformRealDist(0, 255) });
+                g_materials.push_back({ static_cast<Material>(static_cast<uint8_t>(std::min(std::round(::GenerateUniformRealDist(0.5f, 6.0f)), 3.0f))) });
+            }
+        }
+    }
 
-uint32_t constexpr sphereNumber = 3;
+    g_sphereNumber = g_radii.size();
+}
+
+void InitSpheres()
+{
+    g_colors = {
+        { 30, 144, 255},
+        { 10, 255, 110}, {110,  10, 255}, {255, 100, 230},
+        {200, 255, 110}, {210,  10, 255}, {255, 100, 150},
+        { 50, 255, 200}, { 10, 210, 255}, {255, 100, 220},
+    };
+    g_spheres = {
+        {0, -1000.5f, 0},
+        {-1, 0, 0}, {0, 0, 0}, {1, 0, 0},
+        {-1, 1, 0}, {0, 1, 0}, {1, 1, 0},
+        {-1, 2, 0}, {0, 2, 0}, {1, 2, 0},
+    };
+    g_radii = {
+        1000.f,
+        0.5f, 0.5f, 0.5f,
+        0.5f, 0.5f, 0.5f,
+        0.5f, 0.5f, 0.5f,
+    };
+    g_materials = {
+        Material::DIFFUSE,
+        Material::DIFFUSE, Material::REFLECTIVE, Material::DIFFUSE,
+        Material::DIFFUSE, Material::REFRACTIVE, Material::DIFFUSE,
+        Material::DIFFUSE, Material::REFLECTIVE, Material::DIFFUSE,
+    };
+}
 
 void InitImage()
 {
@@ -403,15 +435,15 @@ inline void WritePixel(uint32_t index, math::Vec4 color)
 
 inline uint8_t FindClosestIntersectionSphere(math::Vec4 primeRayDirection, math::Vec4 primeRayOrigin)
 {
-    uint8_t minIndex = sphereNumber;
+    uint8_t minIndex = g_sphereNumber;
     float minDistanceSq = FLT_MAX;
 
-    for (uint8_t index = 0; index < sphereNumber; ++index)
+    for (uint8_t index = 0; index < g_sphereNumber; ++index)
     {
-        if (collision::RaySphereIntersection(sphere[index], radius[index], primeRayDirection, primeRayOrigin))
+        if (collision::RaySphereIntersection(g_spheres[index], g_radii[index], primeRayDirection, primeRayOrigin))
         {
             math::Vec4 const intersectionPoint = collision::CalculateRaySphereClosestContactPoint(
-                sphere[index], radius[index], primeRayOrigin, primeRayDirection
+                g_spheres[index], g_radii[index], primeRayOrigin, primeRayDirection
             );
 
             if (math::Dot(primeRayOrigin, primeRayDirection) < math::Dot(intersectionPoint, primeRayDirection))
@@ -440,15 +472,15 @@ inline math::Vec4 SampleColor<Material::SKYBOX>(math::Vec4 direction, math::Vec4
 template <>
 inline math::Vec4 SampleColor<Material::DIFFUSE>(math::Vec4 direction, math::Vec4 origin, math::Vec4 sampleColor, uint32_t bounceCount, uint32_t sphereIndex)
 {  
-    sampleColor = colors[sphereIndex] * 0.5f;
-    origin = collision::CalculateRaySphereClosestContactPoint(sphere[sphereIndex], radius[sphereIndex], origin, direction);
-    direction = math::Normalize(collision::CalculateRaySphereContactNormal(origin, sphere[sphereIndex]) + GenerateUniformDistInsideSphereVector());
+    sampleColor = g_colors[sphereIndex] * 0.5f;
+    origin = collision::CalculateRaySphereClosestContactPoint(g_spheres[sphereIndex], g_radii[sphereIndex], origin, direction);
+    direction = math::Normalize(collision::CalculateRaySphereContactNormal(origin, g_spheres[sphereIndex]) + GenerateUniformDistInsideSphereVector());
     sphereIndex = FindClosestIntersectionSphere(direction, origin);
 
-    while (--bounceCount && sphereIndex < sphereNumber && materials[sphereIndex] != Material::REFRACTIVE) {
+    while (--bounceCount && sphereIndex < g_sphereNumber && g_materials[sphereIndex] != Material::REFRACTIVE) {
         sampleColor = sampleColor * 0.5f;
-        origin = collision::CalculateRaySphereClosestContactPoint(sphere[sphereIndex], radius[sphereIndex], origin, direction);
-        direction = math::Normalize(origin + collision::CalculateRaySphereContactNormal(origin, sphere[sphereIndex]) + GenerateUniformDistInsideSphereVector());
+        origin = collision::CalculateRaySphereClosestContactPoint(g_spheres[sphereIndex], g_radii[sphereIndex], origin, direction);
+        direction = math::Normalize(origin + collision::CalculateRaySphereContactNormal(origin, g_spheres[sphereIndex]) + GenerateUniformDistInsideSphereVector());
         sphereIndex = FindClosestIntersectionSphere(direction, origin);
     }
 
@@ -458,8 +490,8 @@ inline math::Vec4 SampleColor<Material::DIFFUSE>(math::Vec4 direction, math::Vec
 template <>
 inline math::Vec4 SampleColor<Material::REFLECTIVE>(math::Vec4 direction, math::Vec4 origin, math::Vec4 sampleColor, uint32_t bounceCount, uint32_t sphereIndex)
 {
-    origin = collision::CalculateRaySphereClosestContactPoint(sphere[sphereIndex], radius[sphereIndex], origin, direction);
-    math::Vec4 normal = collision::CalculateRaySphereContactNormal(origin, sphere[sphereIndex]);
+    origin = collision::CalculateRaySphereClosestContactPoint(g_spheres[sphereIndex], g_radii[sphereIndex], origin, direction);
+    math::Vec4 normal = collision::CalculateRaySphereContactNormal(origin, g_spheres[sphereIndex]);
     direction = math::Normalize(math::Reflect(direction, normal) + GenerateNormalDistInsideSphereVector() * 0.01f);
 
     sampleColor = SampleColor(direction, origin, bounceCount);
@@ -475,22 +507,34 @@ template <>
 inline math::Vec4 SampleColor<Material::REFRACTIVE>(math::Vec4 direction, math::Vec4 origin, math::Vec4 sampleColor, uint32_t bounceCount, uint32_t sphereIndex)
 {
     float constexpr nAir = 1.0f;
-    float constexpr nGlass = 1.3f;
+    float constexpr nGlass = 1.5f;
 
-    origin = collision::CalculateRaySphereClosestContactPoint(sphere[sphereIndex], radius[sphereIndex], origin, direction);
-    math::Vec4 n = collision::CalculateRaySphereContactNormal(origin, sphere[sphereIndex]);
+    origin = collision::CalculateRaySphereClosestContactPoint(g_spheres[sphereIndex], g_radii[sphereIndex], origin, direction);
+    math::Vec4 n = collision::CalculateRaySphereContactNormal(origin, g_spheres[sphereIndex]);
 
     float c = math::Dot(-n, direction);
     float r = nAir / nGlass;
+    float schlick = pow((nAir - nGlass) / (nAir + nGlass), 2.f) + (1.f - pow((nAir - nGlass) / (nAir + nGlass), 2)) * pow(1.f - c, 5.f);
+
+    if (::GenerateUniformRealDist(0, 1) < schlick)
+    {
+        return SampleColor(math::Reflect(direction, n), origin, bounceCount);
+    }
 
     if (r*sqrt(1.f - c*c) < 1.f)
     {
         direction = math::Normalize(direction*r + n * (r*c - sqrt(1.f - r*r * (1.f - c*c))));
-        origin = collision::CalculateRaySphereFarthestContactPoint(sphere[sphereIndex], radius[sphereIndex], origin, direction);
-        n = -collision::CalculateRaySphereContactNormal(origin, sphere[sphereIndex]);
+        origin = collision::CalculateRaySphereFarthestContactPoint(g_spheres[sphereIndex], g_radii[sphereIndex], origin, direction);
+        n = -collision::CalculateRaySphereContactNormal(origin, g_spheres[sphereIndex]);
         
         c = math::Dot(-n, direction);
         r = nGlass / nAir;
+
+        schlick = pow((nGlass - nAir) / (nGlass + nAir), 2.f) + (1.f - pow((nGlass - nAir) / (nGlass + nAir), 2.f)) * pow(1.f - c, 5.f);
+        if (::GenerateUniformRealDist(0, 1) < schlick)
+        {
+            return SampleColor(math::Reflect(direction, n), origin, bounceCount);
+        }
         
         if (r*sqrt(1.f - c*c) < 1.f)
         {
@@ -508,9 +552,9 @@ math::Vec4 SampleColor(math::Vec4 direction, math::Vec4 origin, uint32_t bounceC
 {
     uint32_t const sphereIndex = FindClosestIntersectionSphere(direction, origin);
 
-    if (sphereIndex < sphereNumber) 
+    if (sphereIndex < g_sphereNumber) 
     {
-        switch (materials[sphereIndex]) 
+        switch (g_materials[sphereIndex]) 
         {
         case Material::DIFFUSE:
             return SampleColor<Material::DIFFUSE>(direction, origin, { 255.f, 255.f, 255.f, 0.f }, bounceCount, sphereIndex);
@@ -559,7 +603,7 @@ void SaveImage()
 void RenderImageParallel()
 {
     uint32_t const hardwearThreads = std::thread::hardware_concurrency();
-    uint32_t const threadCount = hardwearThreads % 2 != 0 ? hardwearThreads + 1 : hardwearThreads;
+    uint32_t const threadCount = (hardwearThreads % 2 != 0 ? hardwearThreads + 1 : hardwearThreads) - 1;
     uint32_t const segmentWidth = width / threadCount;
     uint32_t const segmentHeigth = heigth / threadCount;
     std::vector<std::thread> threads(threadCount);
@@ -591,6 +635,7 @@ int main()
     static_assert(width % 2 == 0);
     static_assert(heigth % 2 == 0);
 
+    GenerateSpheres();
 	InitImage();
     RenderImageParallel();
 	SaveImage();

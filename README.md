@@ -3,5 +3,5 @@ Simple reverse ray tracer with SIMD linear algebra and basic diffuse, reflective
 Based on Peter Shirley's Ray Tracing in One Weekend
 
 <p align="center">
-  <img src="Ray/images/9.bmp" width="350" title="hover text">
+  <img src="Ray/demo.bmp" width="350" title="hover text">
 </p>
