@@ -25,39 +25,39 @@ struct Vec4
         float xyzw[4];
     };
 
-	inline Vec4 operator-(Vec4 other) const
-	{
+    inline Vec4 operator-(Vec4 other) const
+    {
         other.m128 = _mm_sub_ps(m128, other.m128);
 
-		return other;
-	}
+        return other;
+    }
 
-	constexpr Vec4 operator-(Vec4 other)
-	{
-		other.xyzw[0] = xyzw[0] - other.xyzw[0];
-		other.xyzw[1] = xyzw[1] - other.xyzw[1];
-		other.xyzw[2] = xyzw[2] - other.xyzw[2];
-		other.xyzw[3] = xyzw[3] - other.xyzw[3];
+    constexpr Vec4 operator-(Vec4 other)
+    {
+        other.xyzw[0] = xyzw[0] - other.xyzw[0];
+        other.xyzw[1] = xyzw[1] - other.xyzw[1];
+        other.xyzw[2] = xyzw[2] - other.xyzw[2];
+        other.xyzw[3] = xyzw[3] - other.xyzw[3];
 
-		return other;
-	}
+        return other;
+    }
 
-	inline Vec4 operator+(Vec4 other) const
-	{
+    inline Vec4 operator+(Vec4 other) const
+    {
         other.m128 = _mm_add_ps(other.m128, m128);
 
-		return other;
-	}
+        return other;
+    }
 
-	constexpr Vec4 operator+(Vec4 other)
-	{
-		other.xyzw[0] += xyzw[0];
-		other.xyzw[1] += xyzw[1];
-		other.xyzw[2] += xyzw[2];
-		other.xyzw[3] += xyzw[3];
+    constexpr Vec4 operator+(Vec4 other)
+    {
+        other.xyzw[0] += xyzw[0];
+        other.xyzw[1] += xyzw[1];
+        other.xyzw[2] += xyzw[2];
+        other.xyzw[3] += xyzw[3];
 
-		return other;
-	}
+        return other;
+    }
 
     inline Vec4 operator*(float s) const
     {
@@ -66,29 +66,29 @@ struct Vec4
         };
     }
 
-	constexpr Vec4 operator*(float s)
-	{
-		return {
-			xyzw[0] * s,
-			xyzw[1] * s,
-			xyzw[2] * s,
-			xyzw[3] * s,
-		};
-	}
+    constexpr Vec4 operator*(float s)
+    {
+        return {
+            xyzw[0] * s,
+            xyzw[1] * s,
+            xyzw[2] * s,
+            xyzw[3] * s,
+        };
+    }
 
-	inline Vec4 operator-() const
-	{
+    inline Vec4 operator-() const
+    {
         return {
             _mm_xor_ps(m128, _mm_set_ps1(-0.0))
         };
-	}
+    }
 
-	constexpr Vec4 operator-()
-	{
+    constexpr Vec4 operator-()
+    {
         return {
             -xyzw[0], -xyzw[1], -xyzw[2], -xyzw[3],
         };
-	}
+    }
 
     inline Vec4& operator-=(Vec4 other)
     {
@@ -117,57 +117,117 @@ struct Vec4
 
 inline float Dot(Vec4 a, Vec4 b)
 {
-	_mm_store_ss(a.xyzw, _mm_dp_ps(_mm_load_ps(a.xyzw), _mm_load_ps(b.xyzw), 0b11110001));
-	return a.xyzw[0];
+    a.m128 = _mm_dp_ps(a.m128, b.m128, 0b11110001);
+    return a.xyzw[0];
 }
 
 constexpr Vec4 Cross(Vec4 a, Vec4 b)
 {
-	return {
-		a.xyzw[1] * b.xyzw[2] - a.xyzw[2] * b.xyzw[1],
-		a.xyzw[2] * b.xyzw[0] - a.xyzw[0] * b.xyzw[2],
-		a.xyzw[0] * b.xyzw[0] - a.xyzw[1] * b.xyzw[0],
-	};
+    return {
+        a.xyzw[1] * b.xyzw[2] - a.xyzw[2] * b.xyzw[1],
+        a.xyzw[2] * b.xyzw[0] - a.xyzw[0] * b.xyzw[2],
+        a.xyzw[0] * b.xyzw[0] - a.xyzw[1] * b.xyzw[0],
+    };
 }
 
 inline float LengthSquared(Vec4 vec)
 {
-	__m128 vector128f = _mm_load_ps(vec.xyzw);
-	vector128f = _mm_mul_ps(vector128f, vector128f);
+    __m128 vector128f = _mm_load_ps(vec.xyzw);
+    vector128f = _mm_mul_ps(vector128f, vector128f);
 
-	vector128f = _mm_hadd_ps(vector128f, vector128f);
-	vector128f = _mm_hadd_ps(vector128f, vector128f);
+    vector128f = _mm_hadd_ps(vector128f, vector128f);
+    vector128f = _mm_hadd_ps(vector128f, vector128f);
 
-	_mm_store_ss(vec.xyzw, vector128f);
+    _mm_store_ss(vec.xyzw, vector128f);
 
-	return vec.xyzw[0];
+    return vec.xyzw[0];
 }
 
 inline float Length(Vec4 vec)
 {
-	return std::sqrtf(LengthSquared(vec));
+    return std::sqrtf(LengthSquared(vec));
 }
 
 inline Vec4 Normalize(Vec4 vec)
 {
-	__m128 lengthVector128f = _mm_load_ps(vec.xyzw);
-	__m128 vector128f = lengthVector128f;
-	lengthVector128f = _mm_mul_ps(lengthVector128f, lengthVector128f);
+    __m128 lengthVector128f = _mm_load_ps(vec.xyzw);
+    __m128 vector128f = lengthVector128f;
+    lengthVector128f = _mm_mul_ps(lengthVector128f, lengthVector128f);
 
-	lengthVector128f = _mm_hadd_ps(lengthVector128f, lengthVector128f);
-	lengthVector128f = _mm_hadd_ps(lengthVector128f, lengthVector128f);
-	lengthVector128f = _mm_sqrt_ps(lengthVector128f);
-	vector128f = _mm_div_ps(vector128f, lengthVector128f);
+    lengthVector128f = _mm_hadd_ps(lengthVector128f, lengthVector128f);
+    lengthVector128f = _mm_hadd_ps(lengthVector128f, lengthVector128f);
+    lengthVector128f = _mm_sqrt_ps(lengthVector128f);
+    vector128f = _mm_div_ps(vector128f, lengthVector128f);
 
-	_mm_store_ps(vec.xyzw, vector128f);
+    _mm_store_ps(vec.xyzw, vector128f);
 
-	return vec;
+    return vec;
 }
 
 inline Vec4 Reflect(Vec4 vec, Vec4 normal)
 {
     return vec - normal * math::Dot(vec, normal) * 2.f;
 }
+
+struct Mat4
+{
+    union {
+        struct {
+            __m128 r0, r1, r2, r3;
+        };
+        float array[16];
+        struct {
+            float _00, _01, _02, _03;
+            float _10, _11, _12, _13;
+            float _20, _21, _22, _23;
+            float _30, _31, _32, _33;
+        };
+    };
+
+    Vec4 operator*(Vec4 vec) const
+    {
+        return {
+            _mm_dp_ps(r0, vec.m128, 0b11110001).m128_f32[0],
+            _mm_dp_ps(r1, vec.m128, 0b11110001).m128_f32[0],
+            _mm_dp_ps(r2, vec.m128, 0b11110001).m128_f32[0],
+            _mm_dp_ps(r3, vec.m128, 0b11110001).m128_f32[0],
+        };
+    }
+};
+
+constexpr Mat4 CreateIdentityMatrix()
+{
+    return {
+        1, 0, 0, 0,
+        0, 1, 0, 0,
+        0, 0, 1, 0,
+        0, 0, 0, 1
+    };
+}
+
+Mat4 CreateCameraBasisMatrix(Vec4 eyePos, Vec4 lookAt, Vec4 upDir)
+{
+    Vec4 viewDir = Normalize(lookAt - eyePos);
+    Vec4 right = Normalize(Cross(upDir, viewDir));
+    upDir = Cross(viewDir, right);
+
+    return {
+        right.m128,
+        upDir.m128,
+        viewDir.m128,
+    };
+}
+
+Mat4 Transpose(Mat4 mat)
+{
+    return {
+        mat._00, mat._10, mat._20, mat._30,
+        mat._01, mat._11, mat._21, mat._31,
+        mat._02, mat._12, mat._22, mat._32,
+        mat._03, mat._13, mat._23, mat._33,
+    };
+}
+
 } // namespace math
 
 namespace
@@ -213,10 +273,10 @@ __forceinline math::Vec4 GenerateUnitVector()
 __forceinline math::Vec4 GenerateUniformDistInsideSphereVector(float radius = 0.5f)
 {
     math::Vec4 result;
-    
+
     do {
-        result = { GenerateUniformRealDist(-radius, radius), 
-            GenerateUniformRealDist(-radius, radius), 
+        result = { GenerateUniformRealDist(-radius, radius),
+            GenerateUniformRealDist(-radius, radius),
             GenerateUniformRealDist(-radius, radius) };
     } while (math::Length(result) < radius);
 
@@ -240,25 +300,25 @@ __forceinline math::Vec4 GenerateNormalDistInsideSphereVector(float radius = 0.5
 namespace collision
 {
 inline bool RaySphereIntersection(
-	math::Vec4 sphereCenter, float sphereRadius, math::Vec4 rayDirection, math::Vec4 rayOrigin, float threshold = 1e-3f
+    math::Vec4 sphereCenter, float sphereRadius, math::Vec4 rayDirection, math::Vec4 rayOrigin, float threshold = 1e-3f
 )
 {
     sphereCenter -= rayOrigin;
-	float const tCenter = Dot(sphereCenter, rayDirection);
-	float const distanceSquare = Dot(sphereCenter, sphereCenter) - tCenter * tCenter;
+    float const tCenter = Dot(sphereCenter, rayDirection);
+    float const distanceSquare = Dot(sphereCenter, sphereCenter) - tCenter * tCenter;
 
-	return (tCenter > threshold) && (sphereRadius * sphereRadius - distanceSquare > threshold);
+    return (tCenter > threshold) && (sphereRadius * sphereRadius - distanceSquare > threshold);
 }
 
 inline float CalculateRaySphereMinIntersectionFactor(
-	math::Vec4 raySphere, float sphereRadius, math::Vec4 rayDirection
+    math::Vec4 raySphere, float sphereRadius, math::Vec4 rayDirection
 )
 {
-	float const tCenter = Dot(raySphere, rayDirection);
-	float const distanceSquare = Dot(raySphere, raySphere) - tCenter * tCenter;
-	float const tDelta = std::sqrtf(sphereRadius * sphereRadius - distanceSquare);
+    float const tCenter = Dot(raySphere, rayDirection);
+    float const distanceSquare = Dot(raySphere, raySphere) - tCenter * tCenter;
+    float const tDelta = std::sqrtf(sphereRadius * sphereRadius - distanceSquare);
 
-	return tCenter - tDelta;
+    return tCenter - tDelta;
 };
 
 inline float CalculateRaySphereMaxIntersectionFactor(
@@ -284,13 +344,13 @@ inline math::Vec4 CalculateRaySphereIntersectionFactors(
 };
 
 inline math::Vec4 CalculateRaySphereClosestContactPoint(
-	math::Vec4 sphereCenter, float radius, math::Vec4 rayOrigin, math::Vec4 rayDirection
+    math::Vec4 sphereCenter, float radius, math::Vec4 rayOrigin, math::Vec4 rayDirection
 )
 {
-	float const rayFactor = CalculateRaySphereMinIntersectionFactor(
-		sphereCenter - rayOrigin, radius, rayDirection);
+    float const rayFactor = CalculateRaySphereMinIntersectionFactor(
+        sphereCenter - rayOrigin, radius, rayDirection);
 
-	return rayOrigin + rayDirection * rayFactor;
+    return rayOrigin + rayDirection * rayFactor;
 }
 
 inline math::Vec4 CalculateRaySphereFarthestContactPoint(
@@ -304,41 +364,42 @@ inline math::Vec4 CalculateRaySphereFarthestContactPoint(
 }
 
 inline math::Vec4 CalculateRaySphereContactNormal(
-	math::Vec4 contactPoint, math::Vec4 sphereCenter
+    math::Vec4 contactPoint, math::Vec4 sphereCenter
 )
 {
-	return Normalize(contactPoint - sphereCenter);
+    return Normalize(contactPoint - sphereCenter);
 }
 
 inline bool RayPlaneIntersection(
-	math::Vec4 planeNormal, math::Vec4 planePoint, math::Vec4 rayOrigin, math::Vec4 rayDirection
+    math::Vec4 planeNormal, math::Vec4 planePoint, math::Vec4 rayOrigin, math::Vec4 rayDirection
 )
 {
-	return Dot(planeNormal, rayDirection) < 0.0
-		&& Dot(planeNormal, planePoint) < Dot(planeNormal, rayOrigin);
+    return Dot(planeNormal, rayDirection) < 0.0
+        && Dot(planeNormal, planePoint) < Dot(planeNormal, rayOrigin);
 }
 
 inline math::Vec4 CalculateRayPlaneContactPoint(
-	math::Vec4 planeNormal, math::Vec4 planePoint, math::Vec4 rayOrigin, math::Vec4 rayDirection
+    math::Vec4 planeNormal, math::Vec4 planePoint, math::Vec4 rayOrigin, math::Vec4 rayDirection
 )
 {
-	float const rayPlaneProjection = Dot(planeNormal, rayDirection);
-	float const t = Dot(planeNormal, planePoint - rayOrigin) / rayPlaneProjection;
-	return rayOrigin + rayDirection * t;
+    float const rayPlaneProjection = Dot(planeNormal, rayDirection);
+    float const t = Dot(planeNormal, planePoint - rayOrigin) / rayPlaneProjection;
+    return rayOrigin + rayDirection * t;
 }
-} // namespace collision 
+} // namespace collision
 
 uint32_t constexpr bounces = 10;
-uint32_t constexpr samples = 1000;
+uint32_t constexpr samples = 500;
 uint32_t constexpr width  = 1440;
-uint32_t constexpr heigth = 1440;
+uint32_t constexpr heigth = 1400;
 float constexpr ratio = static_cast<float>(width) / heigth;
 uint8_t  constexpr stride = 3;
 uint32_t constexpr size = width * heigth * stride;
 uint8_t* const data = (uint8_t*)std::malloc(sizeof(uint8_t) * size);
 
-math::Vec4 constexpr lookAt = { 0, 0, 0 };
-math::Vec4 constexpr eyePos = { 0, 3, -5 };
+math::Mat4 viewMatrix = math::CreateIdentityMatrix();
+math::Vec4 constexpr lookAt = { 1, 3, 5 };
+math::Vec4 constexpr eyePos = { 0, 5, -3 };
 math::Vec4 constexpr upDir  = { 0, 1, 0 };
 math::Vec4 constexpr lightPos = { 5, -10, 1 };
 math::Vec4 constexpr planeNormal = { 0, 1, 0 };
@@ -367,25 +428,51 @@ void GenerateSpheres()
     g_radii = { 1000.f };
     g_materials = { Material::DIFFUSE };
 
+    g_colors.push_back({ 0, 0, 0 });
+    g_spheres.push_back({ 0, 3, 10 });
+    g_radii.push_back(3);
+    g_materials.push_back(Material::REFRACTIVE);
+
+    g_colors.push_back({ 0, 0, 0 });
+    g_spheres.push_back({ 5, 3, 5 });
+    g_radii.push_back(3);
+    g_materials.push_back(Material::REFLECTIVE);
+
+    g_colors.push_back({ 223, 55, 132 });
+    g_spheres.push_back({ -7, 3, 14 });
+    g_radii.push_back(3);
+    g_materials.push_back(Material::DIFFUSE);
+
     float const minSphereDistance = 0.1f;
     float const minR = 0.3f;
     float const maxR = 0.5f;
 
-    for (float z = -3; z < 20; z += 1.25f)
+    for (float z = 0; z < 20; z += 1.25f)
     {
-        for (float x = -5; x < 6; x += 1.25f)
+        float const bound = (abs(z)) * 0.85f;
+        for (float x = -5 - bound; x < 6 + bound; x += 1.25f)
         {
-            if (::GenerateUniformRealDist(0, 1.f) > 0.1f)
+            if (::GenerateUniformRealDist(0, 1.f) > 0.5f)
             {
                 g_radii.push_back(::GenerateUniformRealDist(minR, maxR));
                 g_spheres.push_back({ x + ::GenerateUniformRealDist(0, minR), g_radii.back(), z + ::GenerateUniformRealDist(0, minR) });
+
+                if ((math::Length(g_spheres.back() - g_spheres[1]) - g_radii.back() - g_radii[1] < 0.5f)
+                    || (math::Length(g_spheres.back() - g_spheres[2]) - g_radii.back() - g_radii[2] < 0.5f)
+                    || (math::Length(g_spheres.back() - g_spheres[3]) - g_radii.back() - g_radii[3] < 0.5f))
+                {
+                    g_radii.pop_back();
+                    g_spheres.pop_back();
+                    continue;
+                }
+
                 g_colors.push_back({ ::GenerateUniformRealDist(0, 255), ::GenerateUniformRealDist(0, 255), ::GenerateUniformRealDist(0, 255) });
                 g_materials.push_back({ static_cast<Material>(static_cast<uint8_t>(std::min(std::round(::GenerateUniformRealDist(0.5f, 6.0f)), 3.0f))) });
             }
         }
     }
 
-    g_sphereNumber = g_radii.size();
+    g_sphereNumber = static_cast<uint32_t>(g_radii.size());
 }
 
 void InitSpheres()
@@ -418,12 +505,12 @@ void InitSpheres()
 
 void InitImage()
 {
-	for (uint32_t i = 0; i < size; i += stride)
-	{
-		data[i + 0] = static_cast<uint8_t>(initColor.xyzw[0] * (float(size - i) / size));
-		data[i + 1] = static_cast<uint8_t>(initColor.xyzw[1] * (float(size - i) / size));
-		data[i + 2] = static_cast<uint8_t>(initColor.xyzw[2] * (float(size - i) / size));
-	}
+    for (uint32_t i = 0; i < size; i += stride)
+    {
+        data[i + 0] = static_cast<uint8_t>(initColor.xyzw[0] * (float(size - i) / size));
+        data[i + 1] = static_cast<uint8_t>(initColor.xyzw[1] * (float(size - i) / size));
+        data[i + 2] = static_cast<uint8_t>(initColor.xyzw[2] * (float(size - i) / size));
+    }
 }
 
 inline void WritePixel(uint32_t index, math::Vec4 color)
@@ -471,7 +558,7 @@ inline math::Vec4 SampleColor<Material::SKYBOX>(math::Vec4 direction, math::Vec4
 
 template <>
 inline math::Vec4 SampleColor<Material::DIFFUSE>(math::Vec4 direction, math::Vec4 origin, math::Vec4 sampleColor, uint32_t bounceCount, uint32_t sphereIndex)
-{  
+{
     sampleColor = g_colors[sphereIndex] * 0.5f;
     origin = collision::CalculateRaySphereClosestContactPoint(g_spheres[sphereIndex], g_radii[sphereIndex], origin, direction);
     direction = math::Normalize(collision::CalculateRaySphereContactNormal(origin, g_spheres[sphereIndex]) + GenerateUniformDistInsideSphereVector());
@@ -526,7 +613,7 @@ inline math::Vec4 SampleColor<Material::REFRACTIVE>(math::Vec4 direction, math::
         direction = math::Normalize(direction*r + n * (r*c - sqrt(1.f - r*r * (1.f - c*c))));
         origin = collision::CalculateRaySphereFarthestContactPoint(g_spheres[sphereIndex], g_radii[sphereIndex], origin, direction);
         n = -collision::CalculateRaySphereContactNormal(origin, g_spheres[sphereIndex]);
-        
+
         c = math::Dot(-n, direction);
         r = nGlass / nAir;
 
@@ -535,7 +622,7 @@ inline math::Vec4 SampleColor<Material::REFRACTIVE>(math::Vec4 direction, math::
         {
             return SampleColor(math::Reflect(direction, n), origin, bounceCount);
         }
-        
+
         if (r*sqrt(1.f - c*c) < 1.f)
         {
             direction = math::Normalize(direction*r + n * (r*c - sqrt(1.f - r*r * (1.f - c*c))));
@@ -552,9 +639,9 @@ math::Vec4 SampleColor(math::Vec4 direction, math::Vec4 origin, uint32_t bounceC
 {
     uint32_t const sphereIndex = FindClosestIntersectionSphere(direction, origin);
 
-    if (sphereIndex < g_sphereNumber) 
+    if (sphereIndex < g_sphereNumber)
     {
-        switch (g_materials[sphereIndex]) 
+        switch (g_materials[sphereIndex])
         {
         case Material::DIFFUSE:
             return SampleColor<Material::DIFFUSE>(direction, origin, { 255.f, 255.f, 255.f, 0.f }, bounceCount, sphereIndex);
@@ -570,29 +657,29 @@ math::Vec4 SampleColor(math::Vec4 direction, math::Vec4 origin, uint32_t bounceC
 
 void Render(uint32_t yBegin, uint32_t yEnd, uint32_t xBegin, uint32_t xEnd)
 {
-	math::Vec4 const primeRayOrigin{ eyePos };
+    math::Vec4 const primeRayOrigin{ eyePos };
 
-	for (uint32_t y = yBegin; y < yEnd; ++y)
-	{
-		for (uint32_t x = xBegin; x < xEnd; ++x)
-		{
+    for (uint32_t y = yBegin; y < yEnd; ++y)
+    {
+        for (uint32_t x = xBegin; x < xEnd; ++x)
+        {
             uint32_t const index = size - ((width - x) * stride + y * width * stride);
             math::Vec4 pixelColor{ 0, 0, 0, 0 };
 
             for (uint32_t s = 0; s < samples; ++s)
             {
                 math::Vec4 sampleColor{ (float)data[index + 0], (float)data[index + 1], (float)data[index + 2] };
-			    float const u = static_cast<float>(y + GenerateUniformRealDist()) / width;
-			    float const v = static_cast<float>(x + GenerateUniformRealDist()) / heigth;
-			    math::Vec4 const primeRayDirection = math::Normalize({ -1.f + 2.f * v, -1.f + 2.f * u, 1.f } );
+                float const u = static_cast<float>(y + GenerateUniformRealDist()) / width;
+                float const v = static_cast<float>(x + GenerateUniformRealDist()) / heigth;
+                math::Vec4 const primeRayDirection = math::Normalize({ -1.f + 2.f * v, -1.f + 2.f * u, 1.f } );
 
-                pixelColor += SampleColor(primeRayDirection, primeRayOrigin, bounces);
+                pixelColor += SampleColor(math::Normalize(viewMatrix * primeRayDirection), primeRayOrigin, bounces);
             }
 
             pixelColor *= (1.f / static_cast<float>(samples));
             WritePixel(index, pixelColor);
-		}
-	}
+        }
+    }
 }
 
 void SaveImage()
@@ -603,7 +690,7 @@ void SaveImage()
 void RenderImageParallel()
 {
     uint32_t const hardwearThreads = std::thread::hardware_concurrency();
-    uint32_t const threadCount = (hardwearThreads % 2 != 0 ? hardwearThreads + 1 : hardwearThreads) - 1;
+    uint32_t const threadCount = (hardwearThreads % 2 != 0 ? hardwearThreads + 1 : hardwearThreads);
     uint32_t const segmentWidth = width / threadCount;
     uint32_t const segmentHeigth = heigth / threadCount;
     std::vector<std::thread> threads(threadCount);
@@ -618,8 +705,8 @@ void RenderImageParallel()
             uint32_t xEnd = xBegin + segmentWidth > width ? width : xBegin + segmentWidth;
             threads[i] = std::thread(Render, yBegin, yEnd, xBegin, xEnd);
         }
-        for (auto& thread : threads) 
-            if (thread.joinable()) 
+        for (auto& thread : threads)
+            if (thread.joinable())
                 thread.join();
         SaveImage();
     }
@@ -635,8 +722,10 @@ int main()
     static_assert(width % 2 == 0);
     static_assert(heigth % 2 == 0);
 
+    viewMatrix = Transpose(math::CreateCameraBasisMatrix(eyePos, lookAt, upDir));
     GenerateSpheres();
-	InitImage();
+    //InitSpheres();
+    InitImage();
     RenderImageParallel();
-	SaveImage();
+    SaveImage();
 }
