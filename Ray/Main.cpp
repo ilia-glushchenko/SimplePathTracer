@@ -7,6 +7,9 @@
 #include <windows.h>
 #include <intrin.h>
 
+#include <iostream>
+#include <atomic>
+#include <condition_variable>
 #include <algorithm>
 #include <thread>
 #include <random>
@@ -232,22 +235,88 @@ Mat4 Transpose(Mat4 mat)
 
 namespace
 {
-inline float GenerateUniformRealDist(float min = -1.f, float max = 1.f)
+class splitmix
 {
-    std::random_device rd;
-    std::mt19937_64 gen(rd());
-    std::uniform_real_distribution<float> dis(min, max);
+public:
+    using result_type = uint32_t;
+    static constexpr result_type(min)() { return 0; }
+    static constexpr result_type(max)() { return UINT32_MAX; }
 
-    return dis(gen);
-}
+    splitmix() : m_seed(1) {}
+    explicit splitmix(uint64_t seed) : m_seed(seed << 31 | seed) {}
+    explicit splitmix(std::random_device &rd)
+    {
+        seed(rd);
+    }
 
-inline float GenerateNormalRealDist(float min = -1.f, float max = 1.f)
+    void seed(std::random_device &rd)
+    {
+        m_seed = uint64_t(rd()) << 31 | uint64_t(rd());
+    }
+
+    result_type operator()()
+    {
+        uint64_t z = (m_seed += UINT64_C(0x9E3779B97F4A7C15));
+        z = (z ^ (z >> 30)) * UINT64_C(0xBF58476D1CE4E5B9);
+        z = (z ^ (z >> 27)) * UINT64_C(0x94D049BB133111EB);
+        return result_type((z ^ (z >> 31)) >> 31);
+    }
+
+    void discard(unsigned long long n)
+    {
+        for (unsigned long long i = 0; i < n; ++i)
+            operator()();
+    }
+
+private:
+    uint64_t m_seed;
+};
+
+class xorshift
 {
-    std::random_device rd;
-    std::mt19937_64 gen(rd());
-    std::normal_distribution<float> dis(min, max);
+public:
+    using result_type = uint32_t;
+    static constexpr result_type(min)() { return 0; }
+    static constexpr result_type(max)() { return UINT32_MAX; }
 
-    return dis(gen);
+    xorshift() : m_seed(0xc1f651c67c62c6e0ull) {}
+    explicit xorshift(uint64_t seed) : m_seed(seed << 31 | seed) {}
+    explicit xorshift(std::random_device &rd)
+    {
+        seed(rd);
+    }
+
+    void seed(std::random_device &rd)
+    {
+        m_seed = uint64_t(rd()) << 31 | uint64_t(rd());
+    }
+
+    result_type operator()()
+    {
+        uint64_t result = m_seed * 0xd989bcacc137dcd5ull;
+        m_seed ^= m_seed >> 11;
+        m_seed ^= m_seed << 31;
+        m_seed ^= m_seed >> 18;
+        return uint32_t(result >> 32ull);
+    }
+
+    void discard(unsigned long long n)
+    {
+        for (unsigned long long i = 0; i < n; ++i)
+            operator()();
+    }
+
+private:
+    uint64_t m_seed;
+};
+
+__forceinline float GenerateUniformRealDist(float min = -1.f, float max = 1.f)
+{
+    static thread_local ::splitmix rand(
+        static_cast<unsigned int>(std::chrono::steady_clock::now().time_since_epoch().count()));
+    std::uniform_real_distribution<float> u(min, max);
+
+    return u(rand);
 }
 
 template < typename uint8_t D >
@@ -294,6 +363,12 @@ __forceinline math::Vec4 GenerateNormalDistInsideSphereVector(float radius = 0.5
     } while (math::Length(result) < radius);
 
     return result;
+}
+
+__forceinline math::Vec4 Attenuate(math::Vec4 color, math::Vec4 attenuation)
+{
+    color.m128 = _mm_mul_ps(color.m128, attenuation.m128);
+    return color;
 }
 } // namespace ::
 
@@ -389,17 +464,17 @@ inline math::Vec4 CalculateRayPlaneContactPoint(
 } // namespace collision
 
 uint32_t constexpr bounces = 10;
-uint32_t constexpr samples = 500;
-uint32_t constexpr width  = 1440;
-uint32_t constexpr heigth = 1400;
+uint32_t constexpr samples = 10000;
+uint32_t constexpr width  = 1080;
+uint32_t constexpr heigth = 1080;
 float constexpr ratio = static_cast<float>(width) / heigth;
 uint8_t  constexpr stride = 3;
 uint32_t constexpr size = width * heigth * stride;
 uint8_t* const data = (uint8_t*)std::malloc(sizeof(uint8_t) * size);
 
 math::Mat4 viewMatrix = math::CreateIdentityMatrix();
-math::Vec4 constexpr lookAt = { 1, 3, 5 };
-math::Vec4 constexpr eyePos = { 0, 5, -3 };
+math::Vec4 constexpr lookAt = { 0, 1, 0 };
+math::Vec4 constexpr eyePos = { 0, 1, -3 };
 math::Vec4 constexpr upDir  = { 0, 1, 0 };
 math::Vec4 constexpr lightPos = { 5, -10, 1 };
 math::Vec4 constexpr planeNormal = { 0, 1, 0 };
@@ -415,17 +490,27 @@ enum class Material : uint8_t
     DIFFUSE,
 };
 
+struct RenderSegment
+{
+    uint32_t yBegin = 0;
+    uint32_t yEnd = 0;
+    uint32_t xBegin = 0;
+    uint32_t xEnd = 0;
+};
+
 std::vector<math::Vec4> g_colors;
 std::vector<math::Vec4> g_spheres;
 std::vector<float> g_radii;
 std::vector<Material> g_materials;
+std::vector<math::Vec4> g_attenuations;
+std::vector<float> g_diffuses;
 uint32_t g_sphereNumber = 10;
 
 void GenerateSpheres()
 {
-    g_colors = { { 30, 144, 255 } };
-    g_spheres = { {0, -1000, 0} };
-    g_radii = { 1000.f };
+    g_colors = {{30, 144, 255}};
+    g_spheres = {{0, -1e6f, 0}};
+    g_radii = { 1e6f };
     g_materials = { Material::DIFFUSE };
 
     g_colors.push_back({ 0, 0, 0 });
@@ -471,8 +556,18 @@ void GenerateSpheres()
             }
         }
     }
-
     g_sphereNumber = static_cast<uint32_t>(g_radii.size());
+
+    g_attenuations.resize(g_sphereNumber, { 1, 1, 1 });
+    for (auto& v : g_attenuations)
+        if (::GenerateUniformRealDist(0, 1) > 0.2f)
+            v = GenerateUnitVector();
+
+    g_diffuses.resize(g_sphereNumber, 0.0f);
+    for (auto& s : g_diffuses)
+        if (::GenerateUniformRealDist(0, 1) > 0.2f)
+            s = GenerateUniformRealDist(0, 1);
+    g_diffuses[2] = 0.01f;
 }
 
 void InitSpheres()
@@ -483,34 +578,39 @@ void InitSpheres()
         {200, 255, 110}, {210,  10, 255}, {255, 100, 150},
         { 50, 255, 200}, { 10, 210, 255}, {255, 100, 220},
     };
+
     g_spheres = {
-        {0, -1000.5f, 0},
+        {0, -1e3f - 0.5f, 0},
         {-1, 0, 0}, {0, 0, 0}, {1, 0, 0},
         {-1, 1, 0}, {0, 1, 0}, {1, 1, 0},
         {-1, 2, 0}, {0, 2, 0}, {1, 2, 0},
     };
+
     g_radii = {
-        1000.f,
+        1e3f,
         0.5f, 0.5f, 0.5f,
         0.5f, 0.5f, 0.5f,
         0.5f, 0.5f, 0.5f,
     };
+
     g_materials = {
         Material::DIFFUSE,
         Material::DIFFUSE, Material::REFLECTIVE, Material::DIFFUSE,
         Material::DIFFUSE, Material::REFRACTIVE, Material::DIFFUSE,
         Material::DIFFUSE, Material::REFLECTIVE, Material::DIFFUSE,
     };
-}
 
-void InitImage()
-{
-    for (uint32_t i = 0; i < size; i += stride)
-    {
-        data[i + 0] = static_cast<uint8_t>(initColor.xyzw[0] * (float(size - i) / size));
-        data[i + 1] = static_cast<uint8_t>(initColor.xyzw[1] * (float(size - i) / size));
-        data[i + 2] = static_cast<uint8_t>(initColor.xyzw[2] * (float(size - i) / size));
-    }
+    g_attenuations.resize(g_sphereNumber, {1, 1, 1});
+    for (auto& v : g_attenuations)
+        if (::GenerateUniformRealDist(0, 1) > 0.3f)
+            v = GenerateUnitVector();
+
+    g_diffuses.resize(g_sphereNumber, 0.01f);
+    for (auto& s : g_diffuses)
+        if (::GenerateUniformRealDist(0, 1) > 0.3f)
+            s = GenerateUniformRealDist(0, 1);
+
+    g_diffuses[2] = 0;
 }
 
 inline void WritePixel(uint32_t index, math::Vec4 color)
@@ -548,18 +648,18 @@ inline uint8_t FindClosestIntersectionSphere(math::Vec4 primeRayDirection, math:
 math::Vec4 SampleColor(math::Vec4 direction, math::Vec4 origin, uint32_t bounceCount);
 
 template < typename Material M >
-inline math::Vec4 SampleColor(math::Vec4 direction, math::Vec4 origin, math::Vec4 sampleColor, uint32_t bounceCount, uint32_t sphereIndex);
+inline math::Vec4 SampleColor(math::Vec4 direction, math::Vec4 origin, uint32_t bounceCount, uint32_t sphereIndex);
 
 template <>
-inline math::Vec4 SampleColor<Material::SKYBOX>(math::Vec4 direction, math::Vec4 origin, math::Vec4 sampleColor, uint32_t bounceCount, uint32_t sphereIndex)
+inline math::Vec4 SampleColor<Material::SKYBOX>(math::Vec4 direction, math::Vec4 origin, uint32_t bounceCount, uint32_t sphereIndex)
 {
     return initColor * (direction.xyzw[1] + 1.f) * 0.5f;
 }
 
 template <>
-inline math::Vec4 SampleColor<Material::DIFFUSE>(math::Vec4 direction, math::Vec4 origin, math::Vec4 sampleColor, uint32_t bounceCount, uint32_t sphereIndex)
+inline math::Vec4 SampleColor<Material::DIFFUSE>(math::Vec4 direction, math::Vec4 origin, uint32_t bounceCount, uint32_t sphereIndex)
 {
-    sampleColor = g_colors[sphereIndex] * 0.5f;
+    math::Vec4 sampleColor = g_colors[sphereIndex] * 0.5f;
     origin = collision::CalculateRaySphereClosestContactPoint(g_spheres[sphereIndex], g_radii[sphereIndex], origin, direction);
     direction = math::Normalize(collision::CalculateRaySphereContactNormal(origin, g_spheres[sphereIndex]) + GenerateUniformDistInsideSphereVector());
     sphereIndex = FindClosestIntersectionSphere(direction, origin);
@@ -575,23 +675,17 @@ inline math::Vec4 SampleColor<Material::DIFFUSE>(math::Vec4 direction, math::Vec
 }
 
 template <>
-inline math::Vec4 SampleColor<Material::REFLECTIVE>(math::Vec4 direction, math::Vec4 origin, math::Vec4 sampleColor, uint32_t bounceCount, uint32_t sphereIndex)
+inline math::Vec4 SampleColor<Material::REFLECTIVE>(math::Vec4 direction, math::Vec4 origin, uint32_t bounceCount, uint32_t sphereIndex)
 {
     origin = collision::CalculateRaySphereClosestContactPoint(g_spheres[sphereIndex], g_radii[sphereIndex], origin, direction);
     math::Vec4 normal = collision::CalculateRaySphereContactNormal(origin, g_spheres[sphereIndex]);
-    direction = math::Normalize(math::Reflect(direction, normal) + GenerateNormalDistInsideSphereVector() * 0.01f);
+    direction = math::Normalize(math::Reflect(direction, normal) + GenerateNormalDistInsideSphereVector() * g_diffuses[sphereIndex]);
 
-    sampleColor = SampleColor(direction, origin, bounceCount);
-
-    sampleColor.xyzw[0] *= 0.8f;
-    sampleColor.xyzw[1] *= 0.8f;
-    sampleColor.xyzw[2] *= 0.7f;
-
-    return sampleColor;
+    return SampleColor(direction, origin, bounceCount);
 }
 
 template <>
-inline math::Vec4 SampleColor<Material::REFRACTIVE>(math::Vec4 direction, math::Vec4 origin, math::Vec4 sampleColor, uint32_t bounceCount, uint32_t sphereIndex)
+inline math::Vec4 SampleColor<Material::REFRACTIVE>(math::Vec4 direction, math::Vec4 origin, uint32_t bounceCount, uint32_t sphereIndex)
 {
     float constexpr nAir = 1.0f;
     float constexpr nGlass = 1.5f;
@@ -601,7 +695,8 @@ inline math::Vec4 SampleColor<Material::REFRACTIVE>(math::Vec4 direction, math::
 
     float c = math::Dot(-n, direction);
     float r = nAir / nGlass;
-    float schlick = pow((nAir - nGlass) / (nAir + nGlass), 2.f) + (1.f - pow((nAir - nGlass) / (nAir + nGlass), 2)) * pow(1.f - c, 5.f);
+    float rSq = pow((nAir - nGlass) / (nAir + nGlass), 2.f);
+    float schlick = rSq + (1.f - rSq) * pow(1.f - c, 5.f);
 
     if (::GenerateUniformRealDist(0, 1) < schlick)
     {
@@ -617,7 +712,8 @@ inline math::Vec4 SampleColor<Material::REFRACTIVE>(math::Vec4 direction, math::
         c = math::Dot(-n, direction);
         r = nGlass / nAir;
 
-        schlick = pow((nGlass - nAir) / (nGlass + nAir), 2.f) + (1.f - pow((nGlass - nAir) / (nGlass + nAir), 2.f)) * pow(1.f - c, 5.f);
+        rSq = pow((nGlass - nAir) / (nGlass + nAir), 2.f);
+        schlick = rSq + (1.f - rSq) * pow(1.f - c, 5.f);
         if (::GenerateUniformRealDist(0, 1) < schlick)
         {
             return SampleColor(math::Reflect(direction, n), origin, bounceCount);
@@ -644,36 +740,57 @@ math::Vec4 SampleColor(math::Vec4 direction, math::Vec4 origin, uint32_t bounceC
         switch (g_materials[sphereIndex])
         {
         case Material::DIFFUSE:
-            return SampleColor<Material::DIFFUSE>(direction, origin, { 255.f, 255.f, 255.f, 0.f }, bounceCount, sphereIndex);
+            return SampleColor<Material::DIFFUSE>(direction, origin, bounceCount, sphereIndex);
         case Material::REFLECTIVE:
-            return SampleColor<Material::REFLECTIVE>(direction, origin, { 255.f, 255.f, 255.f, 0.f }, bounceCount, sphereIndex);
+            return SampleColor<Material::REFLECTIVE>(direction, origin, bounceCount, sphereIndex);
         case Material::REFRACTIVE:
-            return SampleColor<Material::REFRACTIVE>(direction, origin, { 255.f, 255.f, 255.f, 0.f }, bounceCount, sphereIndex);
+            return SampleColor<Material::REFRACTIVE>(direction, origin, bounceCount, sphereIndex);
         }
     }
 
-    return SampleColor<Material::SKYBOX>(direction, origin, { 255.f, 255.f, 255.f, 0.f }, bounceCount, sphereIndex);
+    return SampleColor<Material::SKYBOX>(direction, origin, bounceCount, sphereIndex);
 }
 
-void Render(uint32_t yBegin, uint32_t yEnd, uint32_t xBegin, uint32_t xEnd)
+math::Vec4 SampleColor(math::Vec4 direction, math::Vec4 origin, uint32_t sphereIndex, uint32_t bounceCount)
 {
-    math::Vec4 const primeRayOrigin{ eyePos };
-
-    for (uint32_t y = yBegin; y < yEnd; ++y)
+    switch (g_materials[sphereIndex])
     {
-        for (uint32_t x = xBegin; x < xEnd; ++x)
+    case Material::DIFFUSE:
+        return SampleColor<Material::DIFFUSE>(direction, origin, bounceCount, sphereIndex);
+    case Material::REFLECTIVE:
+        return SampleColor<Material::REFLECTIVE>(direction, origin, bounceCount, sphereIndex);
+    case Material::REFRACTIVE:
+        return SampleColor<Material::REFRACTIVE>(direction, origin, bounceCount, sphereIndex);
+    }
+
+    return { 255, 0, 0 };
+}
+
+void Render(RenderSegment segment)
+{
+    for (uint32_t y = segment.yBegin; y < segment.yEnd; ++y)
+    {
+        for (uint32_t x = segment.xBegin; x < segment.xEnd; ++x)
         {
             uint32_t const index = size - ((width - x) * stride + y * width * stride);
             math::Vec4 pixelColor{ 0, 0, 0, 0 };
 
             for (uint32_t s = 0; s < samples; ++s)
             {
-                math::Vec4 sampleColor{ (float)data[index + 0], (float)data[index + 1], (float)data[index + 2] };
                 float const u = static_cast<float>(y + GenerateUniformRealDist()) / width;
                 float const v = static_cast<float>(x + GenerateUniformRealDist()) / heigth;
-                math::Vec4 const primeRayDirection = math::Normalize({ -1.f + 2.f * v, -1.f + 2.f * u, 1.f } );
+                math::Vec4 const primeRayDirection = math::Normalize(viewMatrix * math::Vec4{ -1.f + 2.f * v, -1.f + 2.f * u, 1.f } );
+                math::Vec4 const primeRayOrigin{ eyePos };
 
-                pixelColor += SampleColor(math::Normalize(viewMatrix * primeRayDirection), primeRayOrigin, bounces);
+                uint32_t const sphereIndex = FindClosestIntersectionSphere(primeRayDirection, primeRayOrigin);
+                if (sphereIndex < g_sphereNumber)
+                {
+                    pixelColor += SampleColor(primeRayDirection, primeRayOrigin, sphereIndex, bounces);
+                }
+                else
+                {
+                    pixelColor += SampleColor<Material::SKYBOX>(primeRayDirection, primeRayOrigin, sphereIndex, bounces);
+                }
             }
 
             pixelColor *= (1.f / static_cast<float>(samples));
@@ -687,34 +804,61 @@ void SaveImage()
     stbi_write_bmp((std::string("output") + std::to_string(samples) + "s" + std::to_string(bounces) + "b" + ".bmp").c_str(), width, heigth, stride, data);
 }
 
+RenderSegment MakeRenderSegment(uint32_t i, uint32_t j, uint32_t segmentWidth, uint32_t segmentHeigth)
+{
+    uint32_t const yBegin = segmentHeigth * j;
+    uint32_t const yEnd = yBegin + segmentHeigth > heigth ? heigth : yBegin + segmentHeigth;
+    uint32_t const xBegin = segmentWidth * i;
+    uint32_t const xEnd = xBegin + segmentWidth > width ? width : xBegin + segmentWidth;
+
+    return { yBegin, yEnd, xBegin, xEnd };
+}
+
+void RenderJob(RenderSegment segment, std::atomic<int>& freeThreadsCount, std::condition_variable& freeThreadWaitCondition)
+{
+    freeThreadsCount.fetch_sub(1);
+    Render(segment);
+    freeThreadsCount.fetch_add(1);
+    freeThreadWaitCondition.notify_one();
+}
+
 void RenderImageParallel()
 {
     uint32_t const hardwearThreads = std::thread::hardware_concurrency();
     uint32_t const threadCount = (hardwearThreads % 2 != 0 ? hardwearThreads + 1 : hardwearThreads);
+
     uint32_t const segmentWidth = width / threadCount;
     uint32_t const segmentHeigth = heigth / threadCount;
-    std::vector<std::thread> threads(threadCount);
+    std::vector<RenderSegment> segments;
 
-    for (uint32_t j = 0; j < threadCount; ++j)
-    {
-        for (uint32_t i = 0; i < threadCount; ++i)
-        {
-            uint32_t yBegin = segmentHeigth * j;
-            uint32_t yEnd = yBegin + segmentHeigth > heigth ? heigth : yBegin + segmentHeigth;
-            uint32_t xBegin = segmentWidth * i;
-            uint32_t xEnd = xBegin + segmentWidth > width ? width : xBegin + segmentWidth;
-            threads[i] = std::thread(Render, yBegin, yEnd, xBegin, xEnd);
+    for (uint32_t j = 0; j < threadCount; ++j) {
+        for (uint32_t i = 0; i < threadCount; ++i) {
+            segments.push_back({ MakeRenderSegment(i, j, segmentWidth, segmentHeigth) });
         }
-        for (auto& thread : threads)
-            if (thread.joinable())
-                thread.join();
-        SaveImage();
     }
+
+    std::atomic<int> freeThreadsCount(static_cast<int>(threadCount));
+    std::condition_variable freeThreadWaitCondition;
+    std::mutex mutex;
+    std::unique_lock<std::mutex> qlock(mutex);
+    std::vector<std::thread> threads;
+
+    for (auto segment : segments)
+    {
+        static int i = 0;
+        std::cout << ++i << "/" << segments.size() << std::endl;
+
+        std::thread thread(RenderJob, segment, std::ref(freeThreadsCount), std::ref(freeThreadWaitCondition));
+        thread.detach();
+        freeThreadWaitCondition.wait(qlock, [&freeThreadsCount]()->bool { return freeThreadsCount.load() > 0; });
+    }
+
+    freeThreadWaitCondition.wait(qlock, [&freeThreadsCount, &threadCount]()->bool { return freeThreadsCount.load() == threadCount; });
 }
 
 void RenderImage()
 {
-    Render(0, heigth, 0, width);
+    Render({ 0, heigth, 0, width });
 }
 
 int main()
@@ -723,9 +867,7 @@ int main()
     static_assert(heigth % 2 == 0);
 
     viewMatrix = Transpose(math::CreateCameraBasisMatrix(eyePos, lookAt, upDir));
-    GenerateSpheres();
-    //InitSpheres();
-    InitImage();
+    InitSpheres();
     RenderImageParallel();
     SaveImage();
 }
