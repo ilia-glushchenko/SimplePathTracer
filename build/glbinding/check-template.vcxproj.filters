@@ -1,0 +1,17 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="15.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <CustomBuild Include="C:\Users\ilya9\Documents\SimpleRayTracer\build\CMakeFiles\89c2bb86cb760b6fbc1a7dcc229b558d\check-template.rule">
+      <Filter>CMake Rules</Filter>
+    </CustomBuild>
+    <CustomBuild Include="C:\Users\ilya9\Documents\SimpleRayTracer\third_party\glbinding\CMakeLists.txt" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="C:\Users\ilya9\Documents\SimpleRayTracer\build\glbinding\CMakeFiles\check-template" />
+  </ItemGroup>
+  <ItemGroup>
+    <Filter Include="CMake Rules">
+      <UniqueIdentifier>{701B540D-E061-3BB0-9EA1-B1A6D6B6E468}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+</Project>

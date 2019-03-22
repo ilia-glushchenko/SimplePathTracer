@@ -1,0 +1,117 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="15.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <ClCompile Include="C:\Users\ilya9\Documents\SimpleRayTracer\third_party\glbinding\source\glbinding-aux\source\ContextInfo.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\ilya9\Documents\SimpleRayTracer\third_party\glbinding\source\glbinding-aux\source\Meta.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\ilya9\Documents\SimpleRayTracer\third_party\glbinding\source\glbinding-aux\source\Meta_getStringByBitfield.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\ilya9\Documents\SimpleRayTracer\third_party\glbinding\source\glbinding-aux\source\Meta_BitfieldsByString.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\ilya9\Documents\SimpleRayTracer\third_party\glbinding\source\glbinding-aux\source\Meta_BooleansByString.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\ilya9\Documents\SimpleRayTracer\third_party\glbinding\source\glbinding-aux\source\Meta_EnumsByString.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\ilya9\Documents\SimpleRayTracer\third_party\glbinding\source\glbinding-aux\source\Meta_ExtensionsByFunctionString.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\ilya9\Documents\SimpleRayTracer\third_party\glbinding\source\glbinding-aux\source\Meta_ExtensionsByString.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\ilya9\Documents\SimpleRayTracer\third_party\glbinding\source\glbinding-aux\source\Meta_FunctionStringsByExtension.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\ilya9\Documents\SimpleRayTracer\third_party\glbinding\source\glbinding-aux\source\Meta_FunctionStringsByVersion.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\ilya9\Documents\SimpleRayTracer\third_party\glbinding\source\glbinding-aux\source\Meta_ReqVersionsByExtension.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\ilya9\Documents\SimpleRayTracer\third_party\glbinding\source\glbinding-aux\source\Meta_StringsByBitfield.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\ilya9\Documents\SimpleRayTracer\third_party\glbinding\source\glbinding-aux\source\Meta_StringsByBoolean.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\ilya9\Documents\SimpleRayTracer\third_party\glbinding\source\glbinding-aux\source\Meta_StringsByEnum.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\ilya9\Documents\SimpleRayTracer\third_party\glbinding\source\glbinding-aux\source\Meta_StringsByExtension.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\ilya9\Documents\SimpleRayTracer\third_party\glbinding\source\glbinding-aux\source\ValidVersions_list.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\ilya9\Documents\SimpleRayTracer\third_party\glbinding\source\glbinding-aux\source\debug.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\ilya9\Documents\SimpleRayTracer\third_party\glbinding\source\glbinding-aux\source\logging.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\ilya9\Documents\SimpleRayTracer\third_party\glbinding\source\glbinding-aux\source\types_to_string.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\ilya9\Documents\SimpleRayTracer\third_party\glbinding\source\glbinding-aux\source\types_to_string_private.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="C:\Users\ilya9\Documents\SimpleRayTracer\third_party\glbinding\source\glbinding-aux\source\ValidVersions.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="C:\Users\ilya9\Documents\SimpleRayTracer\third_party\glbinding\source\glbinding-aux\source\Meta_Maps.h">
+      <Filter>Source Files</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\Users\ilya9\Documents\SimpleRayTracer\third_party\glbinding\source\glbinding-aux\source\logging_private.h">
+      <Filter>Source Files</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\Users\ilya9\Documents\SimpleRayTracer\third_party\glbinding\source\glbinding-aux\source\types_to_string_private.h">
+      <Filter>Source Files</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\Users\ilya9\Documents\SimpleRayTracer\third_party\glbinding\source\glbinding-aux\include\glbinding-aux\ContextInfo.h">
+      <Filter>Header Files (API)</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\Users\ilya9\Documents\SimpleRayTracer\third_party\glbinding\source\glbinding-aux\include\glbinding-aux\Meta.h">
+      <Filter>Header Files (API)</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\Users\ilya9\Documents\SimpleRayTracer\third_party\glbinding\source\glbinding-aux\include\glbinding-aux\ValidVersions.h">
+      <Filter>Header Files (API)</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\Users\ilya9\Documents\SimpleRayTracer\third_party\glbinding\source\glbinding-aux\include\glbinding-aux\debug.h">
+      <Filter>Header Files (API)</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\Users\ilya9\Documents\SimpleRayTracer\third_party\glbinding\source\glbinding-aux\include\glbinding-aux\logging.h">
+      <Filter>Header Files (API)</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\Users\ilya9\Documents\SimpleRayTracer\third_party\glbinding\source\glbinding-aux\include\glbinding-aux\types_to_string.h">
+      <Filter>Header Files (API)</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\Users\ilya9\Documents\SimpleRayTracer\third_party\glbinding\source\glbinding-aux\include\glbinding-aux\types_to_string.inl">
+      <Filter>Header Files (API)</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\Users\ilya9\Documents\SimpleRayTracer\third_party\glbinding\source\glbinding-aux\include\glbinding-aux\RingBuffer.h">
+      <Filter>Header Files (API)</Filter>
+    </ClInclude>
+    <ClInclude Include="C:\Users\ilya9\Documents\SimpleRayTracer\third_party\glbinding\source\glbinding-aux\include\glbinding-aux\RingBuffer.inl">
+      <Filter>Header Files (API)</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <CustomBuild Include="C:\Users\ilya9\Documents\SimpleRayTracer\third_party\glbinding\source\glbinding-aux\CMakeLists.txt" />
+  </ItemGroup>
+  <ItemGroup>
+    <Filter Include="Header Files (API)">
+      <UniqueIdentifier>{1A90E858-64F7-3DA2-B1CA-A8A12F3128EF}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files">
+      <UniqueIdentifier>{5541F41C-76EC-33A0-B1E4-0C724367BBDD}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+</Project>
