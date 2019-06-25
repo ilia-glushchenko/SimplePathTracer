@@ -31,8 +31,22 @@ include_directories(${IMGUI_INCLUDE_DIR})
 include(StbConfig)
 include_directories(${STB_INCLUDE_DIR})
 
-set(DEMO_HEADERS)
-set(DEMO_SOURCES Main.cpp)
+set(DEMO_HEADERS
+    include/Collision.hpp
+    include/Definitions.hpp
+    include/Gl.hpp
+    include/Globals.hpp
+    include/IOHelpers.hpp
+    include/Math.hpp
+    include/Random.hpp
+    include/Renderer.hpp
+    include/SceneGenerators.hpp
+    include/SingleThreadPathTracer.hpp
+    include/TaskBasedPathTracer.hpp
+)
+set(DEMO_SOURCES 
+    Main.cpp
+)
 
 add_executable (${PROJECT_NAME}
     ${DEMO_SOURCES}
